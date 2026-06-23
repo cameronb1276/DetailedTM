@@ -2,6 +2,7 @@ mod collector;
 mod gpu_metrics;
 mod kill;
 pub(crate) mod model;
+mod network_metrics;
 mod ports;
 pub(crate) mod process_metrics;
 

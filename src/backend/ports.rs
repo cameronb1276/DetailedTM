@@ -69,6 +69,11 @@ fn collect_tcp_ipv4() -> Result<Vec<PortBinding>, PortCollectionError> {
         remote_addr: Some(ipv4(row[3])),
         remote_port: Some(network_port(row[4])),
         state: tcp_state(row[0]),
+        tcp_state_code: Some(row[0]),
+        bytes_sent: None,
+        bytes_received: None,
+        upload_rate_bytes_per_second: None,
+        download_rate_bytes_per_second: None,
     })
 }
 
@@ -84,6 +89,11 @@ fn collect_udp_ipv4() -> Result<Vec<PortBinding>, PortCollectionError> {
         remote_addr: None,
         remote_port: None,
         state: TcpState::NotApplicable,
+        tcp_state_code: None,
+        bytes_sent: None,
+        bytes_received: None,
+        upload_rate_bytes_per_second: None,
+        download_rate_bytes_per_second: None,
     })
 }
 

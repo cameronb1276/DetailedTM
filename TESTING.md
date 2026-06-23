@@ -1,4 +1,4 @@
-# DetailedTM 0.1.0 Testing
+# DetailedTM 0.2.0 Testing
 
 Target environment: Windows 11 x86_64 using the stable
 `x86_64-pc-windows-msvc` Rust toolchain.
@@ -47,6 +47,10 @@ Explorer, or DetailedTM process.
 | 18 | Protected process | Select PID 4/System if visible. | End Task remains disabled; no termination is attempted. |
 | 19 | Five-minute stability | Leave the app open and interact with search/sort periodically for five minutes. | Refresh continues near one second and the UI remains responsive. |
 | 20 | Clean close | Close the window normally. | Window and background collector exit cleanly. |
+| 21 | Network columns | Launch normally, then elevated. | Normal launch shows `N/A` plus a permission warning; elevated launch reports TCP rates. |
+| 22 | Controlled transfer | Create a loopback TCP connection and transfer known byte counts. | The owning PID shows upload/download activity or an honest permission warning. |
+| 23 | Destination details | Select a process with an established IPv4 TCP connection. | Inspector shows local and remote `IP:port`, state, and available byte totals. |
+| 24 | Content boundary | Inspect HTTPS traffic. | UI states that commands, files, bodies, and full URLs are encrypted/not captured; it does not invent content. |
 
 ## Built-in port comparison
 
@@ -80,4 +84,3 @@ data produce `N/A` plus a non-fatal warning; the app must continue refreshing.
 The final commands, artifact hash, native-window smoke test, UI Automation check,
 safe End Task exercise, and five-minute stability result are recorded in
 `release\README_RELEASE.txt` when the release is built.
-

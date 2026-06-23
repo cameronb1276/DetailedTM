@@ -39,6 +39,8 @@ pub enum SortColumn {
     Ram,
     Cpu,
     Gpu,
+    Download,
+    Upload,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -233,7 +235,11 @@ impl AppState {
         } else {
             self.sort_column = Some(column);
             self.sort_direction = match column {
-                SortColumn::Ram | SortColumn::Cpu | SortColumn::Gpu => SortDirection::Descending,
+                SortColumn::Ram
+                | SortColumn::Cpu
+                | SortColumn::Gpu
+                | SortColumn::Download
+                | SortColumn::Upload => SortDirection::Descending,
                 _ => SortDirection::Ascending,
             };
         }
@@ -262,6 +268,14 @@ fn compare_rows(left: &ProcessPortRow, right: &ProcessPortRow, column: SortColum
             .gpu_usage_percent
             .partial_cmp(&right.gpu_usage_percent)
             .unwrap_or(Ordering::Less),
+        SortColumn::Download => left
+            .download_rate_bytes_per_second
+            .partial_cmp(&right.download_rate_bytes_per_second)
+            .unwrap_or(Ordering::Equal),
+        SortColumn::Upload => left
+            .upload_rate_bytes_per_second
+            .partial_cmp(&right.upload_rate_bytes_per_second)
+            .unwrap_or(Ordering::Equal),
     }
 }
 
@@ -326,11 +340,21 @@ mod tests {
                 remote_addr: None,
                 remote_port: None,
                 state: TcpState::Listening,
+                tcp_state_code: Some(2),
+                bytes_sent: None,
+                bytes_received: None,
+                upload_rate_bytes_per_second: None,
+                download_rate_bytes_per_second: None,
             }],
             ram_usage_bytes: 1,
             ram_usage_display: "1 KB".to_owned(),
             cpu_usage_percent: 0.0,
             gpu_usage_percent: None,
+            upload_bytes: 0,
+            download_bytes: 0,
+            upload_rate_bytes_per_second: 0.0,
+            download_rate_bytes_per_second: 0.0,
+            network_usage_available: false,
             is_killable: true,
             status: "Run".to_owned(),
             last_seen: Instant::now(),

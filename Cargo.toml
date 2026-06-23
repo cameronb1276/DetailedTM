@@ -1,6 +1,6 @@
 [package]
 name = "detailed-tm"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 description = "A detailed native Windows process and port monitor"
 license = "MIT"

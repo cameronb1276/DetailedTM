@@ -40,7 +40,7 @@ impl fmt::Display for TcpState {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct PortBinding {
     pub pid: u32,
     pub protocol: Protocol,
@@ -49,6 +49,11 @@ pub struct PortBinding {
     pub remote_addr: Option<Ipv4Addr>,
     pub remote_port: Option<u16>,
     pub state: TcpState,
+    pub tcp_state_code: Option<u32>,
+    pub bytes_sent: Option<u64>,
+    pub bytes_received: Option<u64>,
+    pub upload_rate_bytes_per_second: Option<f64>,
+    pub download_rate_bytes_per_second: Option<f64>,
 }
 
 impl PortBinding {
@@ -72,6 +77,11 @@ pub struct ProcessPortRow {
     pub ram_usage_display: String,
     pub cpu_usage_percent: f32,
     pub gpu_usage_percent: Option<f32>,
+    pub upload_bytes: u64,
+    pub download_bytes: u64,
+    pub upload_rate_bytes_per_second: f64,
+    pub download_rate_bytes_per_second: f64,
+    pub network_usage_available: bool,
     pub is_killable: bool,
     pub status: String,
     pub last_seen: Instant,

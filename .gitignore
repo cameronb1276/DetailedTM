@@ -1,4 +1,5 @@
 /target/
+/DetailedTM.exe
 *.pdb
 *.ilk
 *.log

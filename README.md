@@ -1,6 +1,6 @@
 # DetailedTM
 
-**Version: 0.1.0**
+**Version: 0.2.0**
 
 DetailedTM is a native Windows 11 process and network-port viewer written in
 Rust. It combines Task Manager-style CPU, memory, and GPU readings with the IPv4
@@ -10,7 +10,9 @@ runtime or server, sends no telemetry, and never ends a process automatically.
 ## Features
 
 - Native `eframe`/`egui` Windows desktop interface
-- PID, executable name, owned ports, RAM, CPU, and GPU columns
+- PID, executable name, owned ports, RAM, CPU, GPU, download, and upload columns
+- Selected-process network inspector with local and remote IPv4 `IP:port`
+  destinations and per-connection TCP byte totals
 - One-second snapshots collected on a background thread to keep the UI responsive
 - Case-insensitive name and extension search
 - Partial PID and local-port search
@@ -27,8 +29,9 @@ _Screenshot placeholder - a release screenshot is pending._
 - Windows 11, x86_64
 - For building: stable Rust with the `x86_64-pc-windows-msvc` target and MSVC
   build tools
-- Administrator rights are not required to view ordinary processes, but Windows
-  can restrict metadata and termination of protected or elevated processes
+- Administrator rights are not required to view ordinary process/port metadata.
+  Windows requires elevation to enable per-connection TCP byte counters and can
+  restrict termination of protected or elevated processes.
 
 ## Build and run
 
@@ -67,6 +70,26 @@ A dedicated Rust worker owns the process, port, and PDH collectors. It produces 
 snapshot about once per second and sends it to egui over a bounded channel. Search
 and sorting use only the latest in-memory snapshot, so typing and table rendering
 do not invoke Windows APIs.
+
+## Network visibility and privacy boundary
+
+DetailedTM 0.2.0 uses Windows TCP Extended Statistics (EStats) to measure upload
+and download bytes and rates for active IPv4 TCP connections. Select a row to see
+the local endpoint, remote destination `IP:port`, TCP state, and connection byte
+totals. Run DetailedTM as administrator to allow Windows to enable these counters;
+without elevation the columns honestly show `N/A` and the status bar explains why.
+
+The counters start when DetailedTM observes and enables an active connection.
+Totals therefore mean "observed since this DetailedTM session," not lifetime
+process or historical usage. UDP byte totals and IPv6 traffic are not measured in
+this release, although IPv4 UDP endpoint ownership remains visible.
+
+DetailedTM intentionally does not install a packet driver, intercept TLS, add a
+certificate authority, or store packet payloads. Consequently it cannot see or
+claim to identify commands, transferred files, HTTP bodies, full request URLs, or
+destination URLs inside HTTPS. The inspector labels that content as encrypted or
+not captured instead of guessing. An unfamiliar IP, port, or traffic volume is a
+lead for investigation, not by itself proof that a process is malicious.
 
 ## GPU usage
 
@@ -125,13 +148,17 @@ DetailedTM as administrator. Built-in critical-process blocks remain in effect.
 
 ### Ports do not show for every process
 
-Most processes do not own a TCP or UDP endpoint. Phase 0.1.0 collects IPv4 TCP
+Most processes do not own a TCP or UDP endpoint. Version 0.2.0 collects IPv4 TCP
 and UDP ownership; IPv6 endpoint collection remains a known limitation.
 
 ## Known limitations
 
 - GPU readings depend on Windows and driver-provided PDH GPU Engine counters.
 - IPv6 TCP and UDP ownership is not yet collected.
+- Upload/download measurement covers active IPv4 TCP only and requires elevation;
+  UDP and IPv6 byte totals are not available.
+- Encrypted commands, files, bodies, and full URLs are not visible without TLS
+  interception, which DetailedTM deliberately does not perform.
 - Some protected-process metadata and termination require elevation or remain
   unavailable even when elevated.
 - A custom application icon is pending.

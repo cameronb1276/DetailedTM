@@ -1,75 +1,50 @@
-DetailedTM 0.1.0 - Windows 11 x86_64 Release
+DetailedTM 0.2.0 - Windows 11 x86_64 Release
 ================================================
 
 Build date: 2026-06-22
 Toolchain: stable-x86_64-pc-windows-msvc (rustc 1.96.0)
-Source package version: 0.1.0
-
-Preferred local artifact
-------------------------
+Source package version: 0.2.0
 
 Build command:
 
   cargo build --release
 
-Artifact:
+Cargo artifact:
 
   target\release\DetailedTM.exe
 
-Size: 6,330,880 bytes
-SHA-256: 3E4ADE21A024741E66B92B78049E4834ACA6A7AFFCDD9B531A1BBF260ACC1339
+User-facing copy:
 
-Explicit-target artifact
-------------------------
+  DetailedTM.exe
 
-Build command:
+Size: 6,413,312 bytes
+SHA-256: 7929EBE3B5FC31C0CF4C329991B219F615AC8D87C58967B8BD2119B8BE46C0A7
 
-  cargo build --release --target x86_64-pc-windows-msvc
+Version 0.2.0 network visibility
+--------------------------------
 
-Artifact:
+- Adds per-process IPv4 TCP upload/download totals and rates through Windows
+  TCP Extended Statistics (EStats).
+- Adds local and remote IP:port destination details for selected processes.
+- Requires "Run as administrator" for Windows to enable TCP byte counters.
+- Shows N/A and a clear warning when those counters are denied or unavailable.
+- Does not install a packet driver, intercept TLS, or capture payloads.
+- HTTPS commands, files, bodies, and full URLs remain encrypted and are labeled
+  unavailable instead of being inferred.
+- UDP and IPv6 byte totals are not measured in this release.
 
-  target\x86_64-pc-windows-msvc\release\DetailedTM.exe
-
-Size: 6,332,416 bytes
-SHA-256: 5CA1F3D2C6DDD2ABA32325D2265903AD23A17160B22198C9B0AED17247B52644
-
-Compiled executables are intentionally excluded from Git. Rebuild locally from
-the committed source and verify the newly produced artifact for distribution.
-
-Release verification
---------------------
+Verification
+------------
 
 PASS  cargo fmt -- --check
-PASS  cargo clippy --all-targets --target x86_64-pc-windows-msvc -- -D warnings
-PASS  cargo test --target x86_64-pc-windows-msvc (5 passed, 0 failed)
-PASS  cargo build --release --target x86_64-pc-windows-msvc
+PASS  cargo test (5 passed, 0 failed)
+PASS  cargo clippy --all-targets -- -D warnings
 PASS  cargo build --release
-PASS  Native window launch and required-column UI Automation inspection
-PASS  Name/PID/PORT/extension search unit coverage
-PASS  Live IPv4 TCP and UDP ownership mapping to the current test PID
-PASS  Row selection and End Task enabled state for a controlled process
-PASS  End Task confirmation appeared for a controlled PowerShell sleep process
-PASS  Cancel preserved the controlled process
-PASS  Confirmed End Task stopped the controlled process
-PASS  Selecting protected PID 4 kept End Task disabled
-PASS  Five-minute soak: ten 30-second samples advanced the refresh timestamp,
-      retained a responsive UI Automation tree, and closed cleanly
+PASS  Controlled loopback TCP transfer reports bytes or an honest Windows
+      permission warning
+PASS  Native UI Automation verified Download/Upload columns, N/A behavior,
+      destination inspector, and encrypted-content boundary notice
+PASS  Root executable matches the Cargo release artifact by SHA-256
 
-GPU verification
-----------------
-
-Windows GPU Engine counters were available on the release test machine:
-
-  492 Utilization Percentage samples
-  492 PID-tagged instances
-
-DetailedTM displayed real PDH-derived percentages, including valid 0.0% values.
-On machines without these counters it displays N/A and a non-fatal status warning.
-
-Distribution notes
-------------------
-
-This first release is not code-signed and has no custom icon. Windows may show an
-unrecognized-app warning when the executable is obtained from another computer.
-See README.md for requirements, permissions, limitations, and troubleshooting;
-see TESTING.md for the complete repeatable test plan.
+The compiled root executable is excluded from Git while remaining in the project
+folder for direct use. This release is not code-signed and has no custom icon.
