@@ -1,0 +1,24 @@
+[package]
+name = "detailed-tm"
+version = "0.1.0"
+edition = "2021"
+description = "A detailed native Windows process and port monitor"
+license = "MIT"
+
+[dependencies]
+anyhow = "1.0"
+eframe = "0.31"
+sysinfo = "0.35"
+thiserror = "2.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+windows-sys = { version = "0.60", features = [
+    "Win32_Foundation",
+    "Win32_NetworkManagement_IpHelper",
+    "Win32_Networking_WinSock",
+] }
+
+[profile.release]
+lto = "thin"
+strip = "symbols"
+
