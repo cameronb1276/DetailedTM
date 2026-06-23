@@ -84,7 +84,7 @@ impl AppState {
     pub fn new(context: egui::Context) -> Self {
         let (snapshot_tx, snapshot_rx) = mpsc::sync_channel(2);
         let (command_tx, command_rx) = mpsc::sync_channel(2);
-        std::thread::Builder::new()
+        let worker_result = std::thread::Builder::new()
             .name("detailedtm-collector".to_owned())
             .spawn(move || {
                 let mut collector = BackendCollector::new();
@@ -103,8 +103,21 @@ impl AppState {
                         Err(mpsc::RecvTimeoutError::Disconnected) => break,
                     }
                 }
-            })
-            .expect("background collector thread should start");
+            });
+
+        let (last_refresh, last_status_message) = match worker_result {
+            Ok(_) => (
+                "Waiting for first snapshot…".to_owned(),
+                "Collecting process data…".to_owned(),
+            ),
+            Err(error) => {
+                tracing::error!(%error, "background collector thread could not start");
+                (
+                    "Unavailable".to_owned(),
+                    format!("Process collector could not start: {error}"),
+                )
+            }
+        };
 
         Self {
             rows: Vec::new(),
@@ -113,8 +126,8 @@ impl AppState {
             selected_pid: None,
             sort_column: None,
             sort_direction: SortDirection::Ascending,
-            last_refresh: "Waiting for first snapshot…".to_owned(),
-            last_status_message: "Collecting process data…".to_owned(),
+            last_refresh,
+            last_status_message,
             backend_warning: None,
             pending_confirmation: None,
             snapshot_rx,
@@ -199,8 +212,14 @@ impl AppState {
         };
         let name = row.name.clone();
         match backend::kill_process(pid, &name) {
-            Ok(()) => self.last_status_message = format!("Ended {name} (PID {pid})"),
-            Err(error) => self.last_status_message = error.to_string(),
+            Ok(()) => {
+                tracing::info!(pid, process = %name, "process ended by user request");
+                self.last_status_message = format!("Ended {name} (PID {pid})");
+            }
+            Err(error) => {
+                tracing::warn!(pid, process = %name, %error, "End Task failed");
+                self.last_status_message = error.to_string();
+            }
         }
         self.request_refresh();
     }

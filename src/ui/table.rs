@@ -73,37 +73,56 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
                 let short_ports = shorten(&full_ports, 72);
 
                 table_row.col(|ui| {
-                    ui.label(row.pid.to_string());
+                    if clickable_label(ui, row.pid.to_string()).clicked() {
+                        clicked_pid = Some(row.pid);
+                    }
                 });
                 table_row.col(|ui| {
-                    ui.label(&row.name).on_hover_text(format!(
-                        "Status: {}\nEnd Task eligible: {}\nLast seen: {} ms ago",
-                        row.status,
-                        if row.is_killable { "yes" } else { "no" },
-                        row.last_seen.elapsed().as_millis()
-                    ));
+                    if clickable_label(ui, &row.name)
+                        .on_hover_text(format!(
+                            "Status: {}\nEnd Task eligible: {}\nLast seen: {} ms ago",
+                            row.status,
+                            if row.is_killable { "yes" } else { "no" },
+                            row.last_seen.elapsed().as_millis()
+                        ))
+                        .clicked()
+                    {
+                        clicked_pid = Some(row.pid);
+                    }
                 });
                 table_row.col(|ui| {
-                    ui.label(short_ports)
+                    if clickable_label(ui, short_ports)
                         .on_hover_text(if full_ports.is_empty() {
                             "No IPv4 TCP or UDP ports".to_owned()
                         } else {
                             full_ports.clone()
-                        });
+                        })
+                        .clicked()
+                    {
+                        clicked_pid = Some(row.pid);
+                    }
                 });
                 table_row.col(|ui| {
-                    ui.label(&row.ram_usage_display)
-                        .on_hover_text(format!("{} bytes", row.ram_usage_bytes));
+                    if clickable_label(ui, &row.ram_usage_display)
+                        .on_hover_text(format!("{} bytes", row.ram_usage_bytes))
+                        .clicked()
+                    {
+                        clicked_pid = Some(row.pid);
+                    }
                 });
                 table_row.col(|ui| {
-                    ui.label(format!("{:.1}%", row.cpu_usage_percent));
+                    if clickable_label(ui, format!("{:.1}%", row.cpu_usage_percent)).clicked() {
+                        clicked_pid = Some(row.pid);
+                    }
                 });
                 table_row.col(|ui| {
-                    ui.label(
-                        row.gpu_usage_percent
-                            .map(|value| format!("{value:.1}%"))
-                            .unwrap_or_else(|| "N/A".to_owned()),
-                    );
+                    let gpu = row
+                        .gpu_usage_percent
+                        .map(|value| format!("{value:.1}%"))
+                        .unwrap_or_else(|| "N/A".to_owned());
+                    if clickable_label(ui, gpu).clicked() {
+                        clicked_pid = Some(row.pid);
+                    }
                 });
 
                 if table_row.response().clicked() {
@@ -118,6 +137,10 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
     if let Some(pid) = clicked_pid {
         state.select(pid);
     }
+}
+
+fn clickable_label(ui: &mut egui::Ui, text: impl Into<egui::WidgetText>) -> egui::Response {
+    ui.add(egui::Label::new(text).sense(egui::Sense::click()))
 }
 
 fn shorten(value: &str, max_chars: usize) -> String {

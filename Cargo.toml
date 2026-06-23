@@ -5,6 +5,10 @@ edition = "2021"
 description = "A detailed native Windows process and port monitor"
 license = "MIT"
 
+[[bin]]
+name = "DetailedTM"
+path = "src/main.rs"
+
 [dependencies]
 anyhow = "1.0"
 eframe = "0.31"
