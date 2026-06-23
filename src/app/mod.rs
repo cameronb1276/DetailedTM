@@ -8,23 +8,28 @@ pub struct DetailedTmApp {
 }
 
 impl DetailedTmApp {
-    pub fn new(_creation_context: &eframe::CreationContext<'_>) -> Self {
+    pub fn new(creation_context: &eframe::CreationContext<'_>) -> Self {
         Self {
-            state: AppState::new(),
+            state: AppState::new(creation_context.egui_ctx.clone()),
         }
     }
 }
 
 impl eframe::App for DetailedTmApp {
     fn update(&mut self, context: &egui::Context, _frame: &mut eframe::Frame) {
-        self.state.refresh_if_due();
+        self.state.poll_snapshots();
 
-        egui::CentralPanel::default().show(context, |ui| {
+        egui::TopBottomPanel::top("controls").show(context, |ui| {
             crate::ui::controls::show(ui, &mut self.state);
-            crate::ui::search::show(ui, &mut self.state.search);
-            crate::ui::table::show(ui, &self.state.visible_rows());
+        });
+        egui::TopBottomPanel::bottom("status").show(context, |ui| {
+            crate::ui::controls::show_status(ui, &self.state);
+        });
+        egui::CentralPanel::default().show(context, |ui| {
+            crate::ui::table::show(ui, &mut self.state);
         });
 
+        crate::ui::controls::show_confirmation(context, &mut self.state);
         context.request_repaint_after(std::time::Duration::from_millis(250));
     }
 }

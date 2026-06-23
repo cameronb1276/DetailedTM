@@ -16,9 +16,7 @@ fn backend_collects_the_current_process() {
     let tcp_port = tcp.local_addr().unwrap().port();
     let udp_port = udp.local_addr().unwrap().port();
     let mut collector = BackendCollector::new();
-    let rows = collector
-        .refresh()
-        .expect("backend refresh should be resilient");
+    let rows = collector.refresh_with_warnings().rows;
     let current_pid = std::process::id();
     let current = rows
         .iter()

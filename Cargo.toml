@@ -8,6 +8,7 @@ license = "MIT"
 [dependencies]
 anyhow = "1.0"
 eframe = "0.31"
+egui_extras = "0.31"
 sysinfo = "0.35"
 thiserror = "2.0"
 tracing = "0.1"
@@ -16,9 +17,11 @@ windows-sys = { version = "0.60", features = [
     "Win32_Foundation",
     "Win32_NetworkManagement_IpHelper",
     "Win32_Networking_WinSock",
+    "Win32_System_Performance",
+    "Win32_System_SystemInformation",
+    "Win32_System_Threading",
 ] }
 
 [profile.release]
 lto = "thin"
 strip = "symbols"
-

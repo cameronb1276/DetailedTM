@@ -1,46 +1,131 @@
 use eframe::egui;
+use egui_extras::{Column, TableBuilder};
 
-use crate::backend::ProcessPortRow;
+use crate::app::state::{AppState, SortColumn};
 
-pub fn show(ui: &mut egui::Ui, rows: &[&ProcessPortRow]) {
-    ui.separator();
-    egui::ScrollArea::vertical().show(ui, |ui| {
-        egui::Grid::new("process_table")
-            .striped(true)
-            .show(ui, |ui| {
-                ui.strong("PID");
-                ui.strong("Name");
-                ui.strong("Ports");
-                ui.strong("RAM");
-                ui.strong("CPU");
-                ui.strong("GPU");
-                ui.strong("Status");
-                ui.end_row();
+const ROW_HEIGHT: f32 = 24.0;
 
-                for row in rows {
+pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
+    let indices = state.visible_indices();
+    if let Some(row) = state.selected_row() {
+        ui.horizontal_wrapped(|ui| {
+            ui.strong(format!("Selected: {} (PID {})", row.name, row.pid));
+            let ports = row.ports_display();
+            ui.label(if ports.is_empty() {
+                "Ports: none".to_owned()
+            } else {
+                format!("Ports: {ports}")
+            });
+        });
+        ui.separator();
+    }
+    let headers = [
+        (state.header_label("PID", SortColumn::Pid), SortColumn::Pid),
+        (
+            state.header_label("name.extension", SortColumn::Name),
+            SortColumn::Name,
+        ),
+        (
+            state.header_label("port", SortColumn::Port),
+            SortColumn::Port,
+        ),
+        (
+            state.header_label("Ram Usage", SortColumn::Ram),
+            SortColumn::Ram,
+        ),
+        (
+            state.header_label("CPU Usage", SortColumn::Cpu),
+            SortColumn::Cpu,
+        ),
+        (
+            state.header_label("GPU Usage", SortColumn::Gpu),
+            SortColumn::Gpu,
+        ),
+    ];
+    let mut requested_sort = None;
+    let mut clicked_pid = None;
+
+    TableBuilder::new(ui)
+        .id_salt("process_table")
+        .striped(true)
+        .resizable(true)
+        .sense(egui::Sense::click())
+        .column(Column::initial(70.0).at_least(55.0))
+        .column(Column::initial(240.0).at_least(120.0))
+        .column(Column::remainder().at_least(180.0))
+        .column(Column::initial(110.0).at_least(85.0))
+        .column(Column::initial(100.0).at_least(80.0))
+        .column(Column::initial(100.0).at_least(80.0))
+        .header(28.0, |mut header| {
+            for (label, column) in headers {
+                header.col(|ui| {
+                    if ui.button(label).clicked() {
+                        requested_sort = Some(column);
+                    }
+                });
+            }
+        })
+        .body(|body| {
+            body.rows(ROW_HEIGHT, indices.len(), |mut table_row| {
+                let row = &state.rows[indices[table_row.index()]];
+                table_row.set_selected(state.selected_pid == Some(row.pid));
+                let full_ports = row.ports_display();
+                let short_ports = shorten(&full_ports, 72);
+
+                table_row.col(|ui| {
                     ui.label(row.pid.to_string());
+                });
+                table_row.col(|ui| {
                     ui.label(&row.name).on_hover_text(format!(
-                        "Extension: {}\nEnd Task eligible: {}\nLast seen: {} ms ago",
-                        if row.extension.is_empty() {
-                            "(none)"
-                        } else {
-                            &row.extension
-                        },
+                        "Status: {}\nEnd Task eligible: {}\nLast seen: {} ms ago",
+                        row.status,
                         if row.is_killable { "yes" } else { "no" },
                         row.last_seen.elapsed().as_millis()
                     ));
-                    ui.label(row.ports_display());
+                });
+                table_row.col(|ui| {
+                    ui.label(short_ports)
+                        .on_hover_text(if full_ports.is_empty() {
+                            "No IPv4 TCP or UDP ports".to_owned()
+                        } else {
+                            full_ports.clone()
+                        });
+                });
+                table_row.col(|ui| {
                     ui.label(&row.ram_usage_display)
                         .on_hover_text(format!("{} bytes", row.ram_usage_bytes));
+                });
+                table_row.col(|ui| {
                     ui.label(format!("{:.1}%", row.cpu_usage_percent));
+                });
+                table_row.col(|ui| {
                     ui.label(
                         row.gpu_usage_percent
                             .map(|value| format!("{value:.1}%"))
                             .unwrap_or_else(|| "N/A".to_owned()),
                     );
-                    ui.label(&row.status);
-                    ui.end_row();
+                });
+
+                if table_row.response().clicked() {
+                    clicked_pid = Some(row.pid);
                 }
             });
-    });
+        });
+
+    if let Some(column) = requested_sort {
+        state.set_sort(column);
+    }
+    if let Some(pid) = clicked_pid {
+        state.select(pid);
+    }
+}
+
+fn shorten(value: &str, max_chars: usize) -> String {
+    if value.chars().count() <= max_chars {
+        value.to_owned()
+    } else {
+        let mut shortened: String = value.chars().take(max_chars.saturating_sub(1)).collect();
+        shortened.push('…');
+        shortened
+    }
 }

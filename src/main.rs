@@ -15,7 +15,10 @@ fn main() -> anyhow::Result<()> {
         .try_init()
         .ok();
 
-    let options = eframe::NativeOptions::default();
+    let options = eframe::NativeOptions {
+        viewport: eframe::egui::ViewportBuilder::default().with_inner_size([1100.0, 700.0]),
+        ..Default::default()
+    };
     eframe::run_native(
         "DetailedTM",
         options,

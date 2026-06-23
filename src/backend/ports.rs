@@ -24,8 +24,9 @@ pub enum PortCollectionError {
     Truncated { table: &'static str },
 }
 
-pub fn collect_by_pid() -> HashMap<u32, Vec<PortBinding>> {
+pub fn collect_by_pid() -> (HashMap<u32, Vec<PortBinding>>, Vec<String>) {
     let mut grouped = HashMap::<u32, Vec<PortBinding>>::new();
+    let mut warnings = Vec::new();
 
     match collect_tcp_ipv4() {
         Ok(bindings) => {
@@ -33,7 +34,10 @@ pub fn collect_by_pid() -> HashMap<u32, Vec<PortBinding>> {
                 grouped.entry(binding.pid).or_default().push(binding);
             }
         }
-        Err(error) => tracing::warn!(%error, "IPv4 TCP collection failed"),
+        Err(error) => {
+            tracing::warn!(%error, "IPv4 TCP collection failed");
+            warnings.push(error.to_string());
+        }
     }
     match collect_udp_ipv4() {
         Ok(bindings) => {
@@ -41,13 +45,16 @@ pub fn collect_by_pid() -> HashMap<u32, Vec<PortBinding>> {
                 grouped.entry(binding.pid).or_default().push(binding);
             }
         }
-        Err(error) => tracing::warn!(%error, "IPv4 UDP collection failed"),
+        Err(error) => {
+            tracing::warn!(%error, "IPv4 UDP collection failed");
+            warnings.push(error.to_string());
+        }
     }
 
     for bindings in grouped.values_mut() {
         bindings.sort_by_key(|binding| (binding.protocol.to_string(), binding.local_port));
     }
-    grouped
+    (grouped, warnings)
 }
 
 fn collect_tcp_ipv4() -> Result<Vec<PortBinding>, PortCollectionError> {
