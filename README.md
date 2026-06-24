@@ -20,7 +20,7 @@ runtime or server, sends no telemetry, and never ends a process automatically.
 
 ## Screenshot
 
-_Screenshot placeholder - a release screenshot is pending._
+![DetailedTM process and port monitor](./DetailedTM%20screenshot.png)
 
 ## Requirements
 
