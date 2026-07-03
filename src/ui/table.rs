@@ -7,7 +7,9 @@ const ROW_HEIGHT: f32 = 24.0;
 
 pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
     let indices = state.visible_indices();
+    let mut copied_network_details = None;
     if let Some(row) = state.selected_row() {
+        let network_details = NetworkDetailsText::from_row(row);
         ui.horizontal_wrapped(|ui| {
             ui.strong(format!("Selected: {} (PID {})", row.name, row.pid));
             let ports = row.ports_display();
@@ -23,9 +25,23 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
                 optional_bytes(row.network_usage_available, row.upload_bytes)
             ));
         });
-        egui::CollapsingHeader::new("Network activity and destinations")
-            .default_open(true)
-            .show(ui, |ui| show_network_details(ui, row));
+        egui::collapsing_header::CollapsingState::load_with_default_open(
+            ui.ctx(),
+            ui.make_persistent_id(format!("network_details_{}", row.pid)),
+            true,
+        )
+        .show_header(ui, |ui| {
+            ui.label("Network activity and destinations");
+            if ui
+                .small_button("Copy")
+                .on_hover_text("Copy the network activity and destinations shown here")
+                .clicked()
+            {
+                ui.ctx().copy_text(network_details.copy_text());
+                copied_network_details = Some((row.name.clone(), row.pid));
+            }
+        })
+        .body(|ui| show_network_details(ui, &network_details));
         ui.separator();
     }
     let headers = [
@@ -221,74 +237,126 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
         state.select(pid);
         state.open_selected_traffic_logs();
     }
+    if let Some((name, pid)) = copied_network_details {
+        state.last_status_message =
+            format!("Copied network activity and destinations for {name} (PID {pid})");
+    }
 }
 
 fn clickable_label(ui: &mut egui::Ui, text: impl Into<egui::WidgetText>) -> egui::Response {
     ui.add(egui::Label::new(text).sense(egui::Sense::click()))
 }
 
-fn show_network_details(ui: &mut egui::Ui, row: &crate::backend::ProcessPortRow) {
-    ui.label(format!(
-        "Current rate: ↓ {}  ↑ {}",
-        optional_rate(
-            row.network_usage_available,
-            row.download_rate_bytes_per_second
-        ),
-        optional_rate(
-            row.network_usage_available,
-            row.upload_rate_bytes_per_second
-        )
-    ));
-    if !row.network_usage_available {
-        ui.colored_label(
-            ui.visuals().warn_fg_color,
-            "TCP byte counters are unavailable. Run DetailedTM as administrator to enable upload/download measurement.",
-        );
+fn show_network_details(ui: &mut egui::Ui, details: &NetworkDetailsText) {
+    ui.label(&details.current_rate);
+    if let Some(warning) = &details.warning {
+        ui.colored_label(ui.visuals().warn_fg_color, warning);
+    }
+    for destination in &details.destinations {
+        ui.monospace(destination);
+    }
+    if let Some(note) = &details.destination_note {
+        ui.label(note);
+    }
+    ui.small(details.content_note);
+}
+
+struct NetworkDetailsText {
+    current_rate: String,
+    warning: Option<String>,
+    destinations: Vec<String>,
+    destination_note: Option<String>,
+    content_note: &'static str,
+}
+
+impl NetworkDetailsText {
+    fn from_row(row: &crate::backend::ProcessPortRow) -> Self {
+        let mut destinations = Vec::new();
+        let mut visible_destinations = 0_usize;
+        let mut has_hidden_destinations = false;
+
+        for binding in &row.ports {
+            let Some(remote_addr) = binding.remote_addr else {
+                continue;
+            };
+            let Some(remote_port) = binding.remote_port else {
+                continue;
+            };
+            if remote_port == 0 || remote_addr.is_unspecified() {
+                continue;
+            }
+            visible_destinations += 1;
+            if visible_destinations > 8 {
+                has_hidden_destinations = true;
+                break;
+            }
+            let sent = binding
+                .bytes_sent
+                .map(format_bytes)
+                .unwrap_or_else(|| "unavailable".to_owned());
+            let received = binding
+                .bytes_received
+                .map(format_bytes)
+                .unwrap_or_else(|| "unavailable".to_owned());
+            destinations.push(format!(
+                "{} {}:{} → {}:{} {} | ↓ {} ↑ {}",
+                binding.protocol,
+                binding.local_addr,
+                binding.local_port,
+                remote_addr,
+                remote_port,
+                binding.state,
+                received,
+                sent
+            ));
+        }
+
+        let destination_note = if destinations.is_empty() {
+            Some("No active remote IPv4 TCP destination is visible for this process.".to_owned())
+        } else if has_hidden_destinations {
+            Some(
+                "Additional destinations are hidden to keep the detail panel responsive."
+                    .to_owned(),
+            )
+        } else {
+            None
+        };
+
+        Self {
+            current_rate: format!(
+                "Current rate: ↓ {}  ↑ {}",
+                optional_rate(
+                    row.network_usage_available,
+                    row.download_rate_bytes_per_second
+                ),
+                optional_rate(
+                    row.network_usage_available,
+                    row.upload_rate_bytes_per_second
+                )
+            ),
+            warning: (!row.network_usage_available).then(|| {
+                "TCP byte counters are unavailable. Run DetailedTM as administrator to enable upload/download measurement."
+                    .to_owned()
+            }),
+            destinations,
+            destination_note,
+            content_note: "Content visibility: metadata only. HTTPS/TLS commands, files, request URLs, and response bodies are encrypted and are not captured or guessed. Plaintext payload capture is also off.",
+        }
     }
 
-    let mut shown = 0_usize;
-    for binding in &row.ports {
-        let Some(remote_addr) = binding.remote_addr else {
-            continue;
-        };
-        let Some(remote_port) = binding.remote_port else {
-            continue;
-        };
-        if remote_port == 0 || remote_addr.is_unspecified() {
-            continue;
+    fn copy_text(&self) -> String {
+        let mut lines = Vec::new();
+        lines.push(self.current_rate.clone());
+        if let Some(warning) = &self.warning {
+            lines.push(warning.clone());
         }
-        shown += 1;
-        if shown > 8 {
-            break;
+        lines.extend(self.destinations.iter().cloned());
+        if let Some(note) = &self.destination_note {
+            lines.push(note.clone());
         }
-        let sent = binding
-            .bytes_sent
-            .map(format_bytes)
-            .unwrap_or_else(|| "unavailable".to_owned());
-        let received = binding
-            .bytes_received
-            .map(format_bytes)
-            .unwrap_or_else(|| "unavailable".to_owned());
-        ui.monospace(format!(
-            "{} {}:{} → {}:{} {} | ↓ {} ↑ {}",
-            binding.protocol,
-            binding.local_addr,
-            binding.local_port,
-            remote_addr,
-            remote_port,
-            binding.state,
-            received,
-            sent
-        ));
+        lines.push(self.content_note.to_owned());
+        lines.join("\n")
     }
-    if shown == 0 {
-        ui.label("No active remote IPv4 TCP destination is visible for this process.");
-    } else if shown > 8 {
-        ui.label("Additional destinations are hidden to keep the detail panel responsive.");
-    }
-    ui.small(
-        "Content visibility: metadata only. HTTPS/TLS commands, files, request URLs, and response bodies are encrypted and are not captured or guessed. Plaintext payload capture is also off.",
-    );
 }
 
 fn format_rate(bytes_per_second: f64) -> String {
