@@ -11,8 +11,11 @@ path = "src/main.rs"
 
 [dependencies]
 anyhow = "1.0"
+chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
 eframe = "0.31"
 egui_extras = "0.31"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
 sysinfo = "0.35"
 thiserror = "2.0"
 tracing = "0.1"
@@ -25,6 +28,7 @@ windows-sys = { version = "0.60", features = [
     "Win32_System_SystemInformation",
     "Win32_System_Threading",
 ] }
+zstd = "0.13"
 
 [profile.release]
 lto = "thin"

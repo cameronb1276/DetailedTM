@@ -44,6 +44,9 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
     ];
     let mut requested_sort = None;
     let mut clicked_pid = None;
+    let mut context_end_task = None;
+    let mut context_open_file = None;
+    let mut context_open_logs = None;
 
     TableBuilder::new(ui)
         .id_salt("process_table")
@@ -125,7 +128,23 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
                     }
                 });
 
-                if table_row.response().clicked() {
+                let response = table_row.response();
+                response.context_menu(|ui| {
+                    if ui.button("End Task").clicked() {
+                        context_end_task = Some(row.pid);
+                        ui.close_menu();
+                    }
+                    if ui.button("Open File Location").clicked() {
+                        context_open_file = Some(row.pid);
+                        ui.close_menu();
+                    }
+                    if ui.button("Open Traffic Logs").clicked() {
+                        context_open_logs = Some(row.pid);
+                        ui.close_menu();
+                    }
+                });
+
+                if response.clicked() {
                     clicked_pid = Some(row.pid);
                 }
             });
@@ -136,6 +155,18 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
     }
     if let Some(pid) = clicked_pid {
         state.select(pid);
+    }
+    if let Some(pid) = context_end_task {
+        state.select(pid);
+        state.begin_end_task();
+    }
+    if let Some(pid) = context_open_file {
+        state.select(pid);
+        state.open_selected_file_location();
+    }
+    if let Some(pid) = context_open_logs {
+        state.select(pid);
+        state.open_selected_traffic_logs();
     }
 }
 

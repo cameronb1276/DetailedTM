@@ -1,5 +1,6 @@
 use std::fmt;
 use std::net::Ipv4Addr;
+use std::path::PathBuf;
 use std::time::Instant;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -66,6 +67,7 @@ impl PortBinding {
 pub struct ProcessPortRow {
     pub pid: u32,
     pub name: String,
+    pub exe_path: Option<PathBuf>,
     pub extension: String,
     pub ports: Vec<PortBinding>,
     pub ram_usage_bytes: u64,
