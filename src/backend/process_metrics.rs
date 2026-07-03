@@ -19,6 +19,7 @@ pub fn refresh(system: &mut System) -> Vec<ProcessPortRow> {
 fn row_from_process(pid: Pid, process: &Process, current_pid: u32) -> ProcessPortRow {
     let pid = pid.as_u32();
     let name = executable_name(process);
+    let exe_path = process.exe().map(Path::to_path_buf);
     let extension = Path::new(&name)
         .extension()
         .map(|value| value.to_string_lossy().into_owned())
@@ -28,6 +29,7 @@ fn row_from_process(pid: Pid, process: &Process, current_pid: u32) -> ProcessPor
     ProcessPortRow {
         pid,
         name,
+        exe_path,
         extension,
         ports: Vec::new(),
         ram_usage_bytes,

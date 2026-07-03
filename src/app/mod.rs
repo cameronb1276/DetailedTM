@@ -18,6 +18,7 @@ impl DetailedTmApp {
 impl eframe::App for DetailedTmApp {
     fn update(&mut self, context: &egui::Context, _frame: &mut eframe::Frame) {
         self.state.poll_snapshots();
+        self.state.poll_async_actions();
 
         egui::TopBottomPanel::top("controls").show(context, |ui| {
             crate::ui::controls::show(ui, &mut self.state);
@@ -30,6 +31,7 @@ impl eframe::App for DetailedTmApp {
         });
 
         crate::ui::controls::show_confirmation(context, &mut self.state);
+        crate::ui::controls::show_log_viewer(context, &mut self.state);
         context.request_repaint_after(std::time::Duration::from_millis(250));
     }
 }

@@ -1,5 +1,7 @@
 use thiserror::Error;
-use windows_sys::Win32::Foundation::{CloseHandle, GetLastError, ERROR_ACCESS_DENIED};
+use windows_sys::Win32::Foundation::{
+    CloseHandle, GetLastError, ERROR_ACCESS_DENIED, ERROR_INVALID_PARAMETER,
+};
 use windows_sys::Win32::System::Threading::{OpenProcess, TerminateProcess, PROCESS_TERMINATE};
 
 const CRITICAL_PROCESS_NAMES: &[&str] = &[
@@ -20,6 +22,8 @@ pub enum KillError {
     Protected { pid: u32, name: String },
     #[error("Windows denied permission to end {name} (PID {pid}); administrator privileges may be required")]
     AccessDenied { pid: u32, name: String },
+    #[error("{name} (PID {pid}) is no longer running")]
+    NoLongerRunning { pid: u32, name: String },
     #[error("Windows could not open {name} (PID {pid}); error {code}")]
     OpenFailed { pid: u32, name: String, code: u32 },
     #[error("Windows could not end {name} (PID {pid}); error {code}")]
@@ -62,6 +66,10 @@ pub fn kill_process(pid: u32, process_name: &str) -> Result<(), KillError> {
             pid,
             name: process_name.to_owned(),
         }),
+        Some(ERROR_INVALID_PARAMETER) => Err(KillError::NoLongerRunning {
+            pid,
+            name: process_name.to_owned(),
+        }),
         Some(code) => Err(KillError::TerminateFailed {
             pid,
             name: process_name.to_owned(),
@@ -73,6 +81,11 @@ pub fn kill_process(pid: u32, process_name: &str) -> Result<(), KillError> {
 fn open_error(pid: u32, process_name: &str, code: u32) -> KillError {
     if code == ERROR_ACCESS_DENIED {
         KillError::AccessDenied {
+            pid,
+            name: process_name.to_owned(),
+        }
+    } else if code == ERROR_INVALID_PARAMETER {
+        KillError::NoLongerRunning {
             pid,
             name: process_name.to_owned(),
         }

@@ -1,12 +1,16 @@
 use std::cmp::Ordering;
-use std::sync::mpsc::{self, Receiver, SyncSender};
+use std::path::PathBuf;
+use std::sync::mpsc::{self, Receiver, Sender, SyncSender};
 use std::time::Duration;
 
 use eframe::egui;
 use windows_sys::Win32::Foundation::SYSTEMTIME;
 use windows_sys::Win32::System::SystemInformation::GetLocalTime;
 
-use crate::backend::{self, BackendCollector, BackendRefresh, ProcessPortRow};
+use crate::backend::{
+    self, BackendCollector, BackendRefresh, ProcessPortRow, TrafficCaptureManager,
+    TrafficCaptureStatus, TrafficLogPreview,
+};
 
 pub const REFRESH_INTERVAL: Duration = Duration::from_secs(1);
 
@@ -60,11 +64,20 @@ impl SortDirection {
 
 enum WorkerCommand {
     Refresh,
+    StartTrafficCapture,
+    StopTrafficCapture,
 }
 
 struct WorkerSnapshot {
     refresh: BackendRefresh,
     refreshed_at: String,
+    traffic_status: TrafficCaptureStatus,
+}
+
+enum AsyncActionResult {
+    EndTask { pid: u32, message: String },
+    FileLocation(String),
+    TrafficLogs(TrafficLogPreview),
 }
 
 pub struct AppState {
@@ -78,22 +91,44 @@ pub struct AppState {
     pub last_status_message: String,
     pub backend_warning: Option<String>,
     pub pending_confirmation: Option<u32>,
+    pub traffic_status: TrafficCaptureStatus,
+    pub traffic_log_viewer: Option<TrafficLogViewerState>,
     snapshot_rx: Receiver<WorkerSnapshot>,
     command_tx: SyncSender<WorkerCommand>,
+    action_tx: Sender<AsyncActionResult>,
+    action_rx: Receiver<AsyncActionResult>,
+}
+
+pub struct TrafficLogViewerState {
+    pub title: String,
+    pub root: PathBuf,
+    pub files: Vec<PathBuf>,
+    pub entries: Vec<String>,
+    pub skipped_lines: usize,
+    pub errors: Vec<String>,
 }
 
 impl AppState {
     pub fn new(context: egui::Context) -> Self {
         let (snapshot_tx, snapshot_rx) = mpsc::sync_channel(2);
         let (command_tx, command_rx) = mpsc::sync_channel(2);
+        let (action_tx, action_rx) = mpsc::channel();
         let worker_result = std::thread::Builder::new()
             .name("detailedtm-collector".to_owned())
             .spawn(move || {
                 let mut collector = BackendCollector::new();
+                let mut traffic = TrafficCaptureManager::new();
                 loop {
+                    let mut refresh = collector.refresh_with_warnings();
+                    if let Err(error) = traffic.record_snapshot(&refresh.rows) {
+                        tracing::warn!(%error, "traffic capture snapshot failed");
+                        refresh.warnings.push(error.to_string());
+                    }
+
                     let snapshot = WorkerSnapshot {
-                        refresh: collector.refresh_with_warnings(),
+                        refresh,
                         refreshed_at: local_time_label(),
+                        traffic_status: traffic.status(),
                     };
                     if snapshot_tx.send(snapshot).is_err() {
                         break;
@@ -101,8 +136,13 @@ impl AppState {
                     context.request_repaint();
 
                     match command_rx.recv_timeout(REFRESH_INTERVAL) {
-                        Ok(WorkerCommand::Refresh) | Err(mpsc::RecvTimeoutError::Timeout) => {}
+                        Ok(command) => handle_worker_command(command, &mut traffic),
+                        Err(mpsc::RecvTimeoutError::Timeout) => {}
                         Err(mpsc::RecvTimeoutError::Disconnected) => break,
+                    }
+
+                    while let Ok(command) = command_rx.try_recv() {
+                        handle_worker_command(command, &mut traffic);
                     }
                 }
             });
@@ -132,8 +172,12 @@ impl AppState {
             last_status_message,
             backend_warning: None,
             pending_confirmation: None,
+            traffic_status: TrafficCaptureStatus::stopped(),
+            traffic_log_viewer: None,
             snapshot_rx,
             command_tx,
+            action_tx,
+            action_rx,
         }
     }
 
@@ -145,6 +189,7 @@ impl AppState {
 
         self.rows = snapshot.refresh.rows;
         self.last_refresh = snapshot.refreshed_at;
+        self.traffic_status = snapshot.traffic_status;
         self.backend_warning =
             (!snapshot.refresh.warnings.is_empty()).then(|| snapshot.refresh.warnings.join(" | "));
 
@@ -158,8 +203,64 @@ impl AppState {
         }
     }
 
+    pub fn poll_async_actions(&mut self) {
+        let actions: Vec<_> = self.action_rx.try_iter().collect();
+        for action in actions {
+            match action {
+                AsyncActionResult::EndTask { pid, message } => {
+                    self.pending_confirmation = None;
+                    self.last_status_message = message;
+                    if self.selected_pid == Some(pid) {
+                        self.request_refresh();
+                    }
+                }
+                AsyncActionResult::FileLocation(message) => {
+                    self.last_status_message = message;
+                }
+                AsyncActionResult::TrafficLogs(preview) => {
+                    let process = preview
+                        .process_name
+                        .clone()
+                        .unwrap_or_else(|| format!("PID {}", preview.pid));
+                    self.last_status_message = preview.status_message();
+                    self.traffic_log_viewer = Some(TrafficLogViewerState {
+                        title: format!("Traffic logs: {process}"),
+                        root: preview.root,
+                        files: preview.files,
+                        entries: preview.entries,
+                        skipped_lines: preview.skipped_lines,
+                        errors: preview.errors,
+                    });
+                }
+            }
+        }
+    }
+
     pub fn request_refresh(&self) {
         let _ = self.command_tx.try_send(WorkerCommand::Refresh);
+    }
+
+    pub fn start_traffic_capture(&mut self) {
+        match self.command_tx.try_send(WorkerCommand::StartTrafficCapture) {
+            Ok(()) => {
+                self.last_status_message = "Starting traffic capture...".to_owned();
+            }
+            Err(error) => {
+                self.last_status_message = format!("Could not start traffic capture: {error}");
+            }
+        }
+    }
+
+    pub fn stop_traffic_capture(&mut self) {
+        match self.command_tx.try_send(WorkerCommand::StopTrafficCapture) {
+            Ok(()) => {
+                self.last_status_message =
+                    "Stopping traffic capture and finalizing logs...".to_owned();
+            }
+            Err(error) => {
+                self.last_status_message = format!("Could not stop traffic capture: {error}");
+            }
+        }
     }
 
     pub fn visible_indices(&self) -> Vec<usize> {
@@ -213,17 +314,61 @@ impl AppState {
             return;
         };
         let name = row.name.clone();
-        match backend::kill_process(pid, &name) {
-            Ok(()) => {
-                tracing::info!(pid, process = %name, "process ended by user request");
-                self.last_status_message = format!("Ended {name} (PID {pid})");
-            }
-            Err(error) => {
-                tracing::warn!(pid, process = %name, %error, "End Task failed");
-                self.last_status_message = error.to_string();
-            }
-        }
-        self.request_refresh();
+        self.last_status_message = format!("Ending {name} (PID {pid})...");
+        let action_tx = self.action_tx.clone();
+        std::thread::spawn(move || {
+            let message = match backend::kill_process(pid, &name) {
+                Ok(()) => {
+                    tracing::info!(pid, process = %name, "process ended by user request");
+                    format!("Ended {name} (PID {pid})")
+                }
+                Err(error) => {
+                    tracing::warn!(pid, process = %name, %error, "End Task failed");
+                    error.to_string()
+                }
+            };
+            let _ = action_tx.send(AsyncActionResult::EndTask { pid, message });
+        });
+    }
+
+    pub fn open_selected_file_location(&mut self) {
+        let Some(row) = self.selected_row() else {
+            self.last_status_message = "Select a process first".to_owned();
+            return;
+        };
+        let Some(path) = row.exe_path.clone() else {
+            self.last_status_message = format!(
+                "Windows did not expose the executable path for {} (PID {})",
+                row.name, row.pid
+            );
+            return;
+        };
+        let name = row.name.clone();
+        let pid = row.pid;
+        self.last_status_message = format!("Opening file location for {name} (PID {pid})...");
+        let action_tx = self.action_tx.clone();
+        std::thread::spawn(move || {
+            let message = backend::open_file_location(&path)
+                .map(|()| format!("Opened file location for {name} (PID {pid})"))
+                .unwrap_or_else(|error| error.to_string());
+            let _ = action_tx.send(AsyncActionResult::FileLocation(message));
+        });
+    }
+
+    pub fn open_selected_traffic_logs(&mut self) {
+        let Some(row) = self.selected_row() else {
+            self.last_status_message = "Select a process first".to_owned();
+            return;
+        };
+        let pid = row.pid;
+        let name = row.name.clone();
+        let root = self.traffic_status.log_root.clone();
+        self.last_status_message = format!("Opening traffic logs for {name} (PID {pid})...");
+        let action_tx = self.action_tx.clone();
+        std::thread::spawn(move || {
+            let preview = backend::open_traffic_logs(root, pid, Some(name));
+            let _ = action_tx.send(AsyncActionResult::TrafficLogs(preview));
+        });
     }
 
     pub fn set_sort(&mut self, column: SortColumn) {
@@ -250,6 +395,22 @@ impl AppState {
             format!("{label}{}", self.sort_direction.marker())
         } else {
             label.to_owned()
+        }
+    }
+}
+
+fn handle_worker_command(command: WorkerCommand, traffic: &mut TrafficCaptureManager) {
+    match command {
+        WorkerCommand::Refresh => {}
+        WorkerCommand::StartTrafficCapture => {
+            if let Err(error) = traffic.start() {
+                tracing::warn!(%error, "traffic capture could not start");
+            }
+        }
+        WorkerCommand::StopTrafficCapture => {
+            if let Err(error) = traffic.stop() {
+                tracing::warn!(%error, "traffic capture could not stop cleanly");
+            }
         }
     }
 }
@@ -331,6 +492,7 @@ mod tests {
         ProcessPortRow {
             pid: 12345,
             name: "Example.EXE".to_owned(),
+            exe_path: None,
             extension: "EXE".to_owned(),
             ports: vec![PortBinding {
                 pid: 12345,

@@ -13,6 +13,17 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
             state.request_refresh();
             state.last_status_message = "Refresh requested".to_owned();
         }
+        ui.separator();
+        if state.traffic_status.running {
+            if ui.button("Stop Traffic Capture").clicked() {
+                state.stop_traffic_capture();
+            }
+            ui.colored_label(ui.visuals().selection.bg_fill, "Capture: running");
+        } else if ui.button("Start Traffic Capture").clicked() {
+            state.start_traffic_capture();
+        } else {
+            ui.label("Capture: stopped");
+        }
 
         let can_end = state.selected_row().is_some_and(|row| row.is_killable);
         if ui
@@ -44,6 +55,8 @@ pub fn show_status(ui: &mut egui::Ui, state: &AppState) {
             ui.separator();
             ui.label(&state.last_status_message);
         }
+        ui.separator();
+        ui.label(&state.traffic_status.last_message);
         if let Some(warning) = &state.backend_warning {
             ui.separator();
             ui.colored_label(ui.visuals().warn_fg_color, format!("Warning: {warning}"));
@@ -80,4 +93,56 @@ pub fn show_confirmation(context: &egui::Context, state: &mut AppState) {
                 }
             });
         });
+}
+
+pub fn show_log_viewer(context: &egui::Context, state: &mut AppState) {
+    let Some(viewer) = &mut state.traffic_log_viewer else {
+        return;
+    };
+    let mut open = true;
+    egui::Window::new(&viewer.title)
+        .open(&mut open)
+        .default_width(900.0)
+        .default_height(520.0)
+        .show(context, |ui| {
+            ui.label(format!("Log root: {}", viewer.root.display()));
+            if viewer.files.is_empty() {
+                ui.colored_label(
+                    ui.visuals().warn_fg_color,
+                    "No traffic logs found for this process.",
+                );
+                return;
+            }
+
+            ui.horizontal_wrapped(|ui| {
+                ui.label(format!("Files: {}", viewer.files.len()));
+                ui.separator();
+                ui.label(format!("Displayed entries: {}", viewer.entries.len()));
+                ui.separator();
+                ui.label(format!("Skipped malformed lines: {}", viewer.skipped_lines));
+            });
+            if !viewer.errors.is_empty() {
+                ui.collapsing("Read warnings", |ui| {
+                    for error in &viewer.errors {
+                        ui.colored_label(ui.visuals().warn_fg_color, error);
+                    }
+                });
+            }
+            ui.collapsing("Files read", |ui| {
+                for path in &viewer.files {
+                    ui.monospace(path.display().to_string());
+                }
+            });
+            ui.separator();
+            egui::ScrollArea::vertical()
+                .auto_shrink([false, false])
+                .show(ui, |ui| {
+                    for entry in &viewer.entries {
+                        ui.monospace(entry);
+                    }
+                });
+        });
+    if !open {
+        state.traffic_log_viewer = None;
+    }
 }
